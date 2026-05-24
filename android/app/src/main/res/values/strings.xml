@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">强制提醒</string>
+    <string name="title_activity_main">强制提醒</string>
+    <string name="package_name">com.forcedreminder.app</string>
+    <string name="custom_url_scheme">com.forcedreminder.app</string>
+</resources>
