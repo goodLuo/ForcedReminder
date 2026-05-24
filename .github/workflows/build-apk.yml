@@ -1,0 +1,199 @@
+name: 📱 Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:  # 允许手动触发
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build-apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─── 1. 检出代码 ──────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ─── 2. 设置 Java (Android 需要 JDK 17) ───
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ─── 3. 设置 Node.js ──────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ─── 4. 安装依赖 ──────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ─── 5. 构建前端代码 ──────────────────────
+      - name: Build frontend
+        run: npm run build
+
+      # ─── 6. 初始化 Capacitor ──────────────────
+      - name: Initialize Capacitor
+        run: |
+          npx cap init "强制提醒" com.forcedreminder.app --web-dir dist
+
+      # ─── 7. 添加 Android 平台 ──────────────────
+      - name: Add Android platform
+        run: npx cap add android
+
+      # ─── 8. 应用原生补丁 ───────────────────────
+      - name: Apply native patches
+        run: |
+          echo "📦 Applying native Android patches..."
+
+          # 复制 AndroidManifest.xml
+          cp android-patches/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          echo "✅ AndroidManifest.xml"
+
+          # 创建包目录（如果不存在）
+          mkdir -p android/app/src/main/java/com/forcedreminder/app
+
+          # 复制 Kotlin 源码
+          cp android-patches/AlarmScheduler.kt android/app/src/main/java/com/forcedreminder/app/AlarmScheduler.kt
+          echo "✅ AlarmScheduler.kt"
+
+          cp android-patches/AlertActivity.kt android/app/src/main/java/com/forcedreminder/app/AlertActivity.kt
+          echo "✅ AlertActivity.kt"
+
+          # 复制资源文件
+          mkdir -p android/app/src/main/res/values
+          cp android-patches/strings.xml android/app/src/main/res/values/strings.xml
+          echo "✅ strings.xml"
+
+          # 修改 MainActivity.kt
+          cat > android/app/src/main/java/com/forcedreminder/app/MainActivity.kt << 'EOF'
+          package com.forcedreminder.app
+
+          import com.getcapacitor.BridgeActivity
+          import android.os.Bundle
+
+          class MainActivity : BridgeActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  // 开机/恢复后重新调度闹钟
+                  AlarmScheduler.rescheduleAllFromPrefs(this)
+              }
+          }
+          EOF
+          echo "✅ MainActivity.kt"
+
+          echo ""
+          echo "🎉 All patches applied successfully!"
+
+      # ─── 9. 同步 Capacitor ────────────────────
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # ─── 10. 设置 Gradle 缓存 ──────────────────
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ─── 11. 使 gradlew 可执行 ─────────────────
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # ─── 12. 构建 Debug APK ───────────────────
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      # ─── 13. 构建 Release APK（不签名） ────────
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      # ─── 14. 收集 APK 文件 ─────────────────────
+      - name: Collect APK files
+        run: |
+          mkdir -p output-apks
+
+          # 复制 Debug APK
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk output-apks/
+            echo "✅ Debug APK collected"
+          fi
+
+          # 复制 Release APK (未签名)
+          if [ -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk output-apks/
+            echo "✅ Release APK (unsigned) collected"
+          fi
+
+          # 显示大小
+          ls -lh output-apks/
+
+      # ─── 15. 上传 APK 作为 Artifact ────────────
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forced-reminder-apks
+          path: output-apks/*.apk
+          retention-days: 30
+
+      # ─── 16. (可选) 创建 GitHub Release ───────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output-apks/*.apk
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─── 17. 显示构建结果 ─────────────────────
+      - name: Build Summary
+        run: |
+          echo ""
+          echo "## 📱 构建完成！" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 构建时间 | $(date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 提交 | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 分支 | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 生成的 APK" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "output-apks/app-debug.apk" ]; then
+            SIZE=$(du -h output-apks/app-debug.apk | cut -f1)
+            echo "- **Debug APK**: \`$SIZE\` (可直接安装测试)" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "output-apks/app-release-unsigned.apk" ]; then
+            SIZE=$(du -h output-apks/app-release-unsigned.apk | cut -f1)
+            echo "- **Release APK (未签名)**: \`$SIZE\` (需要签名后才能发布)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 下载方式" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. 点击本页面顶部的 **Actions** 标签" >> $GITHUB_STEP_SUMMARY
+          echo "2. 找到最新的构建记录" >> $GITHUB_STEP_SUMMARY
+          echo "3. 滚动到页面底部，下载 **Artifacts** 中的 APK 文件" >> $GITHUB_STEP_SUMMARY
