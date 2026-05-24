@@ -51,8 +51,8 @@ jobs:
       #     npx cap init "强制提醒" com.forcedreminder.app --web-dir dist
 
       # ─── 7. 添加 Android 平台 ──────────────────
-      - name: Add Android platform
-        run: npx cap add android
+     # - name: Add Android platform
+      #  run: npx cap add android
 
       # ─── 8. 应用原生补丁 ───────────────────────
       - name: Apply native patches
