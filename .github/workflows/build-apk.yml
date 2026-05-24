@@ -46,9 +46,9 @@ jobs:
         run: npm run build
 
       # ─── 6. 初始化 Capacitor ──────────────────
-      - name: Initialize Capacitor
-        run: |
-          npx cap init "强制提醒" com.forcedreminder.app --web-dir dist
+      # - name: Initialize Capacitor
+      #   run: |
+      #     npx cap init "强制提醒" com.forcedreminder.app --web-dir dist
 
       # ─── 7. 添加 Android 平台 ──────────────────
       - name: Add Android platform
