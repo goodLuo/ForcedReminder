@@ -27,8 +27,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme.NoActionBar"
-        android:usesCleartextTraffic="true"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -53,7 +52,7 @@
             android:turnScreenOn="true"
             android:excludeFromRecents="true"
             android:taskAffinity=""
-            android:theme="@style/AppTheme.AlertActivity" />
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <!-- 开机自启动广播接收器 -->
         <receiver
