@@ -117,13 +117,17 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-     # ─── 12. 构建 Debug APK ───────────────────
+    # ─── 12. 构建 Debug APK ───────────────────
       - name: Build Debug APK
-        run: ./android/gradlew assembleDebug --no-daemon
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
 
       # ─── 13. 构建 Release APK（不签名） ────────
       - name: Build Release APK
-        run: ./android/gradlew assembleRelease --no-daemon
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
 
       # ─── 14. 收集 APK 文件 ─────────────────────
       - name: Collect APK files
